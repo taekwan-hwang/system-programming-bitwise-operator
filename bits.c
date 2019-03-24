@@ -179,9 +179,10 @@ NOTES:
  *  Rating: 2
  */
 int sign(int x) {
-    return 2;
+    return (x >> 31) + ~((~x + 1) >> 31) + 1;
 }
-/* 
+
+/*
  * upperBits - pads n upper bits with 1's
  *  You may assume 0 <= n <= 32
  *  Example: upperBits(4) = 0xF0000000
@@ -190,19 +191,21 @@ int sign(int x) {
  *  Rating: 1
  */
 int upperBits(int n) {
-  return 2;
+    return (!!n << 31) >> (n + ~0);
 }
-/* 
- * bitXor - x^y using only ~ and & 
+
+/*
+ * bitXor - x^y using only ~ and &
  *   Example: bitXor(4, 5) = 1
  *   Legal ops: ~ &
  *   Max ops: 14
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+    return ~(~(~x & y) & ~(x & ~y));
 }
-/* 
+
+/*
  * absVal - absolute value of x
  *   Example: absVal(-1) = 1.
  *   You may assume -TMax <= x <= TMax
@@ -211,9 +214,11 @@ int bitXor(int x, int y) {
  *   Rating: 4
  */
 int absVal(int x) {
-  return 2;
+    int msbFilled = x >> 31;
+    return (x ^ msbFilled) + !!msbFilled;
 }
-/* 
+
+/*
  * getByte - Extract byte n from word x
  *   Bytes numbered from 0 (least significant) to 3 (most significant)
  *   Examples: getByte(0x12345678,1) = 0x56
@@ -222,8 +227,9 @@ int absVal(int x) {
  *   Rating: 2
  */
 int getByte(int x, int n) {
-  return 2;
+    return (x >> (n << 3)) & 0xff;
 }
+
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
  *  Examples: howManyBits(12) = 5
@@ -237,40 +243,69 @@ int getByte(int x, int n) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+    int msbFilled = x >> 31;
+    int zeroOr16, zeroOr8, zeroOr4, zeroOr2, zeroOr1;
+
+    x = (~x & msbFilled) | (x & ~msbFilled);
+
+    zeroOr16 = (!!(x >> 16)) << 4;
+    x = x >> zeroOr16;
+
+    zeroOr8 = (!!(x >> 8)) << 3;
+    x = x >> zeroOr8;
+
+    zeroOr4 = (!!(x >> 4)) << 2;
+    x = x >> zeroOr4;
+
+    zeroOr2 = (!!(x >> 2)) << 1;
+    x = x >> zeroOr2;
+
+    zeroOr1 = !!(x >> 1);
+
+    return zeroOr16 + zeroOr8 + zeroOr4 + zeroOr2 + zeroOr1 + (x >> zeroOr1) + 1;
 }
-/* 
- * isGreater - if x > y  then return 1, else return 0 
+
+/*
+ * isGreater - if x > y  then return 1, else return 0
  *   Example: isGreater(4,5) = 0, isGreater(5,4) = 1
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 24
  *   Rating: 3
  */
 int isGreater(int x, int y) {
-  return 2;
+    int xMSBFilled = x >> 31;
+    int yMSBFilled = y >> 31;
+
+    return (((!(xMSBFilled ^ yMSBFilled)) & ((y + (~x + 1)) >> 31)) | ((xMSBFilled ^ yMSBFilled) & (yMSBFilled & 1)));
 }
-/* 
+
+/*
  * rotateRight - Rotate x to the right by n
  *   Can assume that 0 <= n <= 31
  *   Examples: rotateRight(0x87654321,4) = 0x187654321
  *   Legal ops: ~ & ^ | + << >> !
  *   Max ops: 25
- *   Rating: 3 
+ *   Rating: 3
  */
 int rotateRight(int x, int n) {
-  return 2;
+    int movingPart = x << (32 + (~n + 1));
+    int intMax = ~(1 << 31);
+
+    return movingPart | ((x >> n) & (intMax >> (n + ((~1) + 1))));
 }
-/* 
+
+/*
  * bang - Compute !x without using !
  *   Examples: bang(3) = 0, bang(0) = 1
  *   Legal ops: ~ & ^ | + << >>
  *   Max ops: 12
- *   Rating: 4 
+ *   Rating: 4
  */
 int bang(int x) {
-  return 2;
+    return ((x | (~x + 1)) >> 31) + 1;
 }
-/* 
+
+/*
  * floatIsEqual - Compute f == g for floating point arguments f and g.
  *   Both the arguments are passed as unsigned int's, but
  *   they are to be interpreted as the bit-level representations of
@@ -282,9 +317,23 @@ int bang(int x) {
  *   Rating: 2
  */
 int floatIsEqual(unsigned uf, unsigned ug) {
-    return 2;
+    int expMask = 0x7f800000;
+    int noSignMask = 0x7fffff;
+    int absUf = uf & noSignMask;
+    int absUg = ug & noSignMask;
+
+
+    if ((((uf & expMask) == expMask) && (absUf != 0)) || (((ug & expMask) == expMask) && (absUg != 0))) {
+        return 0;
+    }
+
+    if (((uf ^ ug) == 0) || (((uf << 1) == 0) && ((ug << 1) == 0))) {
+        return 1;
+    }
+    return 0;
 }
-/* 
+
+/*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
  *
@@ -292,15 +341,25 @@ int floatIsEqual(unsigned uf, unsigned ug) {
  *   representation as the single-precision floating-point number 2.0^x.
  *   If the result is too small to be represented as a denorm, return
  *   0. If too large, return +INF.
- * 
- *   Legal ops: Any integer/unsigned operations incl. ||, &&. Also if, while 
- *   Max ops: 30 
+ *
+ *   Legal ops: Any integer/unsigned operations incl. ||, &&. Also if, while
+ *   Max ops: 30
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    int exp = x + 127;
+    if (exp < 0) {
+        return 0;
+    }
+
+    if (exp >= 255) {
+        return 0x7f800000;
+    }
+
+    return exp << 23;
 }
-/* 
+
+/*
  * floatInt2Float - Return bit-level equivalent of expression (float) x
  *   Result is returned as unsigned int, but
  *   it is to be interpreted as the bit-level representation of a
@@ -310,5 +369,26 @@ unsigned floatPower2(int x) {
  *   Rating: 4
  */
 unsigned floatInt2Float(int x) {
-  return 2;
+    int sign = x & 0x80000000;
+    int rounds = 0;
+    int exp = 158;
+
+    if (x == 0) {
+        return 0;
+    }
+
+    if (sign) {
+        x = -x;
+    }
+
+    while (!(x & 0x80000000)) {
+        x = x << 1;
+        exp--;
+    }
+
+    if ((x & 0x0080) && ((x & 0x01ff) != 0x0080)) {
+        rounds = 1;
+    }
+
+    return sign | ((exp << 23) + ((x >> 8) & 0x007fffff) + rounds);
 }
